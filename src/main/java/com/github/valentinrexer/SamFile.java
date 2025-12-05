@@ -3,7 +3,6 @@ package com.github.valentinrexer;
 import htsjdk.samtools.*;
 
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Iterator;
 
 public class SamFile {
@@ -23,4 +22,10 @@ public class SamFile {
     public Iterator<SAMRecord> iterator() {
         return reader.iterator();
     }
+
+    public SAMFileHeader.SortOrder sortOrder() {
+        SAMFileHeader header = reader.getFileHeader();
+        return header.getSortOrder();
+    }
+
 }

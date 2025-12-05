@@ -20,5 +20,14 @@
             <artifactId>htsjdk</artifactId>
             <version>4.3.0</version>
         </dependency>
+
+        <dependency>
+            <groupId>edu.lmu.gobi</groupId>
+            <artifactId>augmentedtree</artifactId>
+            <version>1.0</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/lib/AugmentedTree.jar</systemPath>
+        </dependency>
+
     </dependencies>
 </project>
