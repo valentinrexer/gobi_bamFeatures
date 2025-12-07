@@ -3,6 +3,7 @@ package com.github.valentinrexer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import augmentedTree.*;
 
 public class Transcript {
     private final String transcriptId;
@@ -44,6 +45,15 @@ public class Transcript {
 
     public int getStart() { return start; }
     public int getEnd() { return end; }
+
+    public IntervalTree<Region> getExonIntervalTree() {
+        var tree = new IntervalTree<Region>();
+
+        for (Exon exon : exons)
+            tree.add(new  Region(exon.getStart(), exon.getEnd()));
+
+        return tree;
+    }
 
     @Override
     public String toString() {

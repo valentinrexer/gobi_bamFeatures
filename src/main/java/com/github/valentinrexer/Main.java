@@ -1,7 +1,9 @@
 package com.github.valentinrexer;
 
+import htsjdk.samtools.AlignmentBlock;
 import htsjdk.samtools.SAMRecord;
 
+import javax.swing.*;
 import java.io.IOException;
 import java.nio.file.Paths;
 import java.util.HashMap;
@@ -16,11 +18,13 @@ public class Main {
         Map<String, Map<String, SAMRecord>> pendingPerChromosome = new HashMap<>();
 
         GtfData gtfData = GtfParser.parse(
-                Paths.get("/home/valentinrexer/core/uni/bioinformatics/semester7/gobi/bam_data/BamFeatures/Saccharomyces_cerevisiae.R64-1-1.75.gtf")
-        );
+                Paths.get("/home/valentinrexer/core/uni/bioinformatics/semester7/gobi/bam_data/BamFeatures/Saccharomyces_cerevisiae.R64-1-1.75.gtf"),
+        null);
         SamFile sam = new SamFile(
                 Paths.get("/home/valentinrexer/core/uni/bioinformatics/semester7/gobi/bam_data/BamFeatures/y.ns.2.bam")
         );
+
+        var c = 0;
 
         for (Iterator<SAMRecord> it = sam.iterator(); it.hasNext(); ) {
             SAMRecord record = it.next();
@@ -57,7 +61,8 @@ public class Main {
             }
 
             ReadPair pair = new ReadPair(first, second);
-            pair.process(gtfData);
+            pair.process(gtfData, null);
         }
+        System.out.println(c);
     }
 }

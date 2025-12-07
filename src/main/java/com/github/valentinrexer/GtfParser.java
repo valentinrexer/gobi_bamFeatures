@@ -7,8 +7,7 @@ import java.nio.file.Path;
 import java.util.*;
 
 public class GtfParser {
-
-    public static GtfData parse(Path gtfPath) throws IOException {
+    public static GtfData parse(Path gtfPath, Boolean frStrand) throws IOException {
 
         GtfData data = new GtfData();
 
@@ -65,7 +64,7 @@ public class GtfParser {
             }
         }
 
-        data.buildIntervalTrees();
+        data.buildIntervalTrees(frStrand != null);
 
         return data;
     }

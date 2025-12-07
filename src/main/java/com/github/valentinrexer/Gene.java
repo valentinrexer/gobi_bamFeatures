@@ -1,6 +1,6 @@
 package com.github.valentinrexer;
 
-import augmentedTree.Interval;
+import augmentedTree.*;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -13,6 +13,7 @@ public class Gene implements Interval {
     private final char strand;
     private final String chromosome;
     private final List<Transcript> transcripts;
+    private IntervalTree<Region> mergedTranscriptTree;
     private int start = Integer.MAX_VALUE;
     private int end = Integer.MIN_VALUE;
 
@@ -49,6 +50,23 @@ public class Gene implements Interval {
 
     public List<Transcript> getTranscripts() {
         return Collections.unmodifiableList(transcripts);
+    }
+
+    public IntervalTree<Region> getMergedTranscriptTree() {
+        if (mergedTranscriptTree == null)
+            computeMergedTranscriptTree();
+
+        return mergedTranscriptTree;
+    }
+
+    private void computeMergedTranscriptTree() {
+        mergedTranscriptTree = new IntervalTree<>();
+
+        for  (Transcript transcript : transcripts) {
+            for (Exon exon : transcript.getExons()) {
+                mergedTranscriptTree.add(new Region(exon.getStart(), exon.getEnd()));
+            }
+        }
     }
 
     @Override
