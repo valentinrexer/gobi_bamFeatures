@@ -5,6 +5,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class GtfParser {
     public static GtfData parse(Path gtfPath, Boolean frStrand) throws IOException {
@@ -35,17 +37,15 @@ public class GtfParser {
                 if (!featureType.equals("transcript") && !featureType.equals("exon"))
                     continue;
 
-                // Parse last column attributes
-                Map<String, String> attr = parseAttributes(attributeString);
 
-                String geneId       = attr.get("gene_id");
-                String transcriptId = attr.get("transcript_id");
+                String geneId = getAttribute("gene_id", attributeString);
+                String transcriptId = getAttribute("transcript_id", attributeString);
 
                 if (geneId == null || transcriptId == null)
-                    continue; // broken line
+                    continue;
 
-                String geneName  = attr.getOrDefault("gene_name", geneId);
-                String biotype   = attr.getOrDefault("gene_biotype", "unknown");
+                String geneName = getAttribute("gene_name", attributeString);
+                String biotype = getAttribute("gene_biotype", attributeString);
 
                 // Fetch or create gene
                 Gene gene = data.getOrCreateGene(geneId, geneName, biotype, strand, chr);
@@ -69,7 +69,16 @@ public class GtfParser {
         return data;
     }
 
-
+    private static String getAttribute(String attribute, String s) {
+        Pattern pattern = Pattern.compile(attribute + "\\s+\"([^\"]+)\"");
+        Matcher matcher = pattern.matcher(s);
+        if (matcher.find()) {
+            return matcher.group(1);
+        } else {
+            System.out.println("Wasn't able to extract '" + attribute + "' for line object " + s);
+            return null;
+        }
+    }
 
     private static Map<String, String> parseAttributes(String attr) {
         Map<String, String> map = new HashMap<>();

@@ -2,6 +2,7 @@ package com.github.valentinrexer;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import augmentedTree.*;
 
@@ -54,6 +55,57 @@ public class Transcript {
 
         return tree;
     }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+
+        Transcript that = (Transcript) o;
+
+        if (strand != that.strand) return false;
+        if (!transcriptId.equals(that.transcriptId)) return false;
+        if (!geneId.equals(that.geneId)) return false;
+
+        // Compare exons structurally: same count + same coordinates
+        if (this.exons.size() != that.exons.size()) return false;
+
+        // Ensure consistent ordering before structural comparison
+        List<Exon> ex1 = new ArrayList<>(this.exons);
+        List<Exon> ex2 = new ArrayList<>(that.exons);
+
+        ex1.sort(Comparator.comparingInt(Exon::getStart));
+        ex2.sort(Comparator.comparingInt(Exon::getStart));
+
+        for (int i = 0; i < ex1.size(); i++) {
+            Exon a = ex1.get(i);
+            Exon b = ex2.get(i);
+
+            if (a.getStart() != b.getStart() || a.getEnd() != b.getEnd())
+                return false;
+        }
+
+        return true;
+    }
+
+    @Override
+    public int hashCode() {
+        int result = transcriptId.hashCode();
+        result = 31 * result + geneId.hashCode();
+        result = 31 * result + Character.hashCode(strand);
+
+        // Include exon structure in hash
+        List<Exon> sorted = new ArrayList<>(exons);
+        sorted.sort(Comparator.comparingInt(Exon::getStart));
+
+        for (Exon e : sorted) {
+            result = 31 * result + e.getStart();
+            result = 31 * result + e.getEnd();
+        }
+
+        return result;
+    }
+
 
     @Override
     public String toString() {

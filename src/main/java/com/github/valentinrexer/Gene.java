@@ -27,7 +27,8 @@ public class Gene implements Interval {
     }
 
     public void addTranscript(Transcript transcript) {
-        transcripts.add(transcript);
+        if(!transcripts.contains(transcript))
+            transcripts.add(transcript);
     }
 
     public void computeBoundaries() {

@@ -34,10 +34,24 @@ public class ReadPair {
 
         int mm = getMismatches();
         int clipped = getTotalClipped();
+        var geneLvl = getGeneAnnotation(gtfData, frStrand);
 
-        for (GenicLevelContainer container : getGeneAnnotation(gtfData, frStrand)) {
-            
+        int gCount;
+        String outString;
+        if (geneLvl.getFirst().level() == GenicLevel.INTERGENIC) {
+            gCount = 0;
+            var geneDistance = "";
+            outString = "";
         }
+        else {
+            gCount = geneLvl.size();
+            StringBuilder associatedGenesString = new StringBuilder();
+            for (GenicLevelContainer container : geneLvl)
+                associatedGenesString.append(container.annotationString()).append("|");
+
+            outString = associatedGenesString.substring(0, associatedGenesString.length() - 1);
+        }
+        System.out.println("gcount:" + gCount + "\t" + outString);
 
         return "";
     }
@@ -76,9 +90,10 @@ public class ReadPair {
                     .add(container);
         }
 
-        if (!genicLevelMapping.get(GenicLevel.TRANSCRIPTOMIC).isEmpty()) return genicLevelMapping.get(GenicLevel.TRANSCRIPTOMIC);
-        if (!genicLevelMapping.get((GenicLevel.MERGED_TRANSCRIPTOMIC)).isEmpty()) return genicLevelMapping.get(GenicLevel.MERGED_TRANSCRIPTOMIC);
-        return genicLevelMapping.get(GenicLevel.TRANSCRIPTOMIC);
+        if (genicLevelMapping.containsKey(GenicLevel.TRANSCRIPTOMIC)) return genicLevelMapping.get(GenicLevel.TRANSCRIPTOMIC);
+        if (genicLevelMapping.containsKey(GenicLevel.MERGED_TRANSCRIPTOMIC)) return genicLevelMapping.get(GenicLevel.MERGED_TRANSCRIPTOMIC);
+        if (genicLevelMapping.containsKey(GenicLevel.INTRONIC)) return genicLevelMapping.get(GenicLevel.INTRONIC);
+        return List.of(new GenicLevelContainer(GenicLevel.INTERGENIC, null));
     }
 
     private GenicLevelContainer getGenicLevel(Gene candidateGene) {
