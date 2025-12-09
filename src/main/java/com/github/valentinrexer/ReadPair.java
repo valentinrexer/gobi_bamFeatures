@@ -14,6 +14,7 @@ public class ReadPair {
     private final Region firstRecordRegion;
     private final Region lastRecordRegion;
     private final List<Region> regionVector;
+    private final String chromosome;
 
     public ReadPair(SAMRecord firstRecord, SAMRecord lastRecord) {
         this.firstRecord = firstRecord;
@@ -23,6 +24,7 @@ public class ReadPair {
         regionVector.addAll(getRegionVector(lastRecord, false));
         regionVector = mergeVector(regionVector);
         this.regionVector = regionVector;
+        this.chromosome = firstRecord.getReferenceName();
 
         firstRecordRegion = new Region(firstRecord.getAlignmentStart(), firstRecord.getAlignmentEnd());
         lastRecordRegion = new Region(lastRecord.getAlignmentStart(), lastRecord.getAlignmentEnd());
@@ -37,11 +39,14 @@ public class ReadPair {
         var geneLvl = getGeneAnnotation(gtfData, frStrand);
 
         int gCount;
-        String outString;
+        String geneOutputString;
         if (geneLvl.getFirst().level() == GenicLevel.INTERGENIC) {
             gCount = 0;
-            var geneDistance = "";
-            outString = "";
+            var geneDistance = getGeneDistance(chromosome, gtfData, frStrand);
+            geneOutputString = "gdist:" + geneDistance;
+
+            var hasAntisenseGene = hasAntiSenseGene(gtfData, frStrand);
+            geneOutputString += "\tantisense:" + hasAntisenseGene;
         }
         else {
             gCount = geneLvl.size();
@@ -49,11 +54,16 @@ public class ReadPair {
             for (GenicLevelContainer container : geneLvl)
                 associatedGenesString.append(container.annotationString()).append("|");
 
-            outString = associatedGenesString.substring(0, associatedGenesString.length() - 1);
+            geneOutputString = associatedGenesString.substring(0, associatedGenesString.length() - 1);
         }
-        System.out.println("gcount:" + gCount + "\t" + outString);
 
-        return "";
+        return firstRecord.getReadName() + "\tmm:" + mm + "\tclipping:" + clipped + "\tgcount:" + gCount + "\t" + geneOutputString;
+    }
+
+    private boolean hasAntiSenseGene(GtfData gtfData, Boolean frStrand) {
+        if (frStrand == null) return false;
+        var annotation = getGeneAnnotation(gtfData, !frStrand);
+        return annotation.getFirst().level() != GenicLevel.INTERGENIC;
     }
     
     private int getGeneDistance(String chr, GtfData gtfData, Boolean frStrand) {
@@ -313,6 +323,14 @@ public class ReadPair {
         }
 
         return new Region(minPos, maxPos);
+    }
+
+    public Region getFirstRecordRegion() {
+        return firstRecordRegion;
+    }
+
+    public Region getLastRecordRegion() {
+        return lastRecordRegion;
     }
 
     @Override
