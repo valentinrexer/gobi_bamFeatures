@@ -14,38 +14,43 @@ public class ReadPair {
     private final Region firstRecordRegion;
     private final Region lastRecordRegion;
     private final List<Region> regionVector;
+    private final Set<Region> intronsFirst;
+    private final Set<Region> intronsLast;
     private final String chromosome;
 
     public ReadPair(SAMRecord firstRecord, SAMRecord lastRecord) {
         this.firstRecord = firstRecord;
         this.lastRecord = lastRecord;
 
-        List<Region> regionVector = getRegionVector(firstRecord, false);
-        regionVector.addAll(getRegionVector(lastRecord, false));
+        List<Region> regionVector = getRegionVector(firstRecord);
+        regionVector.addAll(getRegionVector(lastRecord));
         regionVector = mergeVector(regionVector);
         this.regionVector = regionVector;
         this.chromosome = firstRecord.getReferenceName();
 
         firstRecordRegion = new Region(firstRecord.getAlignmentStart(), firstRecord.getAlignmentEnd());
         lastRecordRegion = new Region(lastRecord.getAlignmentStart(), lastRecord.getAlignmentEnd());
+
+        this.intronsFirst = getIntrons(firstRecord);
+        this.intronsLast = getIntrons(lastRecord);
     }
 
-    public String process(GtfData gtfData, Boolean frStrand) {
+    public String process(TreeGtf treeGtf, Boolean frStrand) {
         Integer nSplit = getNSplit();
         if (nSplit == null) return firstRecord.getReadName() + "\tsplit-inconsistent:true";
 
         int mm = getMismatches();
         int clipped = getTotalClipped();
-        var geneLvl = getGeneAnnotation(gtfData, frStrand);
+        var geneLvl = getGeneAnnotation(treeGtf, frStrand);
 
         int gCount;
         String geneOutputString;
         if (geneLvl.getFirst().level() == GenicLevel.INTERGENIC) {
             gCount = 0;
-            var geneDistance = getGeneDistance(chromosome, gtfData, frStrand);
+            var geneDistance = getGeneDistance(chromosome, treeGtf, frStrand);
             geneOutputString = "gdist:" + geneDistance;
 
-            var hasAntisenseGene = hasAntiSenseGene(gtfData, frStrand);
+            var hasAntisenseGene = hasAntiSenseGene(treeGtf, frStrand);
             geneOutputString += "\tantisense:" + hasAntisenseGene;
         }
         else {
@@ -57,19 +62,19 @@ public class ReadPair {
             geneOutputString = associatedGenesString.substring(0, associatedGenesString.length() - 1);
         }
 
-        return firstRecord.getReadName() + "\tmm:" + mm + "\tclipping:" + clipped + "\tgcount:" + gCount + "\t" + geneOutputString;
+        return firstRecord.getReadName() + "\tmm:" + mm + "\tclipping:" + clipped + "\tnsplit:" + nSplit + "\tgcount:"+ gCount + "\t" + geneOutputString;
     }
 
-    private boolean hasAntiSenseGene(GtfData gtfData, Boolean frStrand) {
+    private boolean hasAntiSenseGene(TreeGtf treeGtf, Boolean frStrand) {
         if (frStrand == null) return false;
-        var annotation = getGeneAnnotation(gtfData, !frStrand);
+        var annotation = getGeneAnnotation(treeGtf, !frStrand);
         return annotation.getFirst().level() != GenicLevel.INTERGENIC;
     }
     
-    private int getGeneDistance(String chr, GtfData gtfData, Boolean frStrand) {
+    private int getGeneDistance(String chr, TreeGtf treeGtf, Boolean frStrand) {
         var readBounds = getMinStartMaxEnd();
-        var leftNeighbor = gtfData.getLeftNeighbor(chr, readBounds.start(), readBounds.end(), frStrand);
-        var rightNeighbor = gtfData.getRightNeighbor(chr, readBounds.start(), readBounds.end(), frStrand);
+        var leftNeighbor = treeGtf.getLeftNeighbor(chr, readBounds.start(), readBounds.end(), frStrand);
+        var rightNeighbor = treeGtf.getRightNeighbor(chr, readBounds.start(), readBounds.end(), frStrand);
 
         int minLeftDist = Integer.MAX_VALUE, minRightDist = Integer.MAX_VALUE;
         for (Gene neighbor : leftNeighbor) {
@@ -88,8 +93,8 @@ public class ReadPair {
         return Math.min(minLeftDist, minRightDist);
     } 
 
-    private List<GenicLevelContainer> getGeneAnnotation(GtfData gtfData, Boolean frStrand) {
-        var candidates = getCandidateGenes(gtfData, frStrand);
+    private List<GenicLevelContainer> getGeneAnnotation(TreeGtf treeGtf, Boolean frStrand) {
+        var candidates = getCandidateGenes(treeGtf, frStrand);
         var genicLevelMapping = new HashMap<GenicLevel, List<GenicLevelContainer>>();
 
         for (Gene candidate : candidates) {
@@ -149,13 +154,12 @@ public class ReadPair {
         else return ReadPairType.INTERGENIC;
     }
 
-    private List<Gene> getCandidateGenes(GtfData gtfData, Boolean frStrand) {
+    private List<Gene> getCandidateGenes(TreeGtf treeGtf, Boolean frStrand) {
         String chr = firstRecord.getReferenceName();
 
         var readBounds = getMinStartMaxEnd();
+        HashSet<Gene> candidates = new HashSet<>(treeGtf.getContainingGenes(chr, readBounds.start(), readBounds.end(), frStrand));
 
-        HashSet<Gene> candidates = new HashSet<>(gtfData.getContainingGenes(chr, readBounds.start(), readBounds.end(), frStrand));
-        
         return new ArrayList<>(candidates);
     }
 
@@ -183,84 +187,38 @@ public class ReadPair {
         return merged;
     }
 
-    private static List<Region> getRegionVector(SAMRecord record, Boolean intron) {
+    private static List<Region> getRegionVector(SAMRecord record) {
         List<Region> regions = new ArrayList<>();
 
-        List<CigarElement> cigarElements = record.getCigar().getCigarElements();
-        var pointer = record.getAlignmentStart();
-
-        for (CigarElement cigarElement : cigarElements) {
-            var length = cigarElement.getLength();
-            CigarOperator operator = cigarElement.getOperator();
-
-            switch (operator) {
-                case M:
-                case EQ:
-                case X:
-                case D:
-                    if (intron == null || !intron) regions.add(new Region(pointer, pointer + length - 1));
-                    pointer += length;
-                    break;
-
-                case N:
-                    if (intron == null || intron) regions.add(new Region(pointer, pointer + length - 1));
-                    pointer += length;
-                    break;
-
-                case I:
-                case S:
-                case H:
-                case P:
-                    break;
-
-                default:
-                    throw new IllegalStateException("Unknown operator: " + operator);
-            }
+        for (AlignmentBlock block : record.getAlignmentBlocks()) {
+            regions.add(new Region(block.getReferenceStart(), block.getReferenceStart() + block.getLength() - 1));
         }
 
         return regions;
     }
 
     private Integer getNSplit() {
-        Region firstRecordRegion = new Region(firstRecord.getAlignmentStart(), firstRecord.getAlignmentEnd());
-        Region lastRecordRegion = new Region(lastRecord.getAlignmentStart(), lastRecord.getAlignmentEnd());
-        Region intersectingRegion = firstRecordRegion.getIntersectingRegion(lastRecordRegion);
-
-        if (!(intersectingRegion == null))
-            if (!isConsistentSplit()) return null;
-
-
-        int nCount = 0;
-        for (SAMRecord record : List.of(firstRecord, lastRecord)){
-            for (CigarElement element : record.getCigar().getCigarElements())
-                if (element.getOperator() == CigarOperator.N) nCount++;
-        }
-        return nCount;
-    }
-
-    private boolean isConsistentSplit() {
         Region overlap = firstRecordRegion.getIntersectingRegion(lastRecordRegion);
 
-        // No shared region → they cannot contradict each other → treat as consistent
-        if (overlap == null) return true;
+        Set<Region> firstIntrons = new HashSet<>(intronsFirst);
+        Set<Region> lastIntrons  = new HashSet<>(intronsLast);
 
-        // Get introns as Sets<Region>
-        Set<Region> firstIntrons = getIntrons(firstRecord);
-        Set<Region> lastIntrons  = getIntrons(lastRecord);
+        if (overlap != null) {
+            var firstIntronsOverlap = firstIntrons.stream()
+                    .filter(i -> i.intersects(overlap))
+                    .collect(Collectors.toSet());
 
-        // Keep only introns inside the shared region
-        firstIntrons = firstIntrons.stream()
-                .filter(i -> i.intersects(overlap))
-                .collect(Collectors.toSet());
+            var lastIntronsOverlap = lastIntrons.stream()
+                    .filter(i -> i.intersects(overlap))
+                    .collect(Collectors.toSet());
 
-        lastIntrons = lastIntrons.stream()
-                .filter(i -> i.intersects(overlap))
-                .collect(Collectors.toSet());
+            if (!firstIntronsOverlap.equals(lastIntronsOverlap))
+                return null;
+        }
 
-        // Consistent = both sets identical
-        return firstIntrons.equals(lastIntrons);
+        firstIntrons.addAll(lastIntrons);
+        return firstIntrons.size();
     }
-
 
     private static HashSet<Region> getIntrons(SAMRecord record) {
         var introns = new HashSet<Region>();
@@ -273,7 +231,7 @@ public class ReadPair {
             AlignmentBlock b = blocks.get(i + 1);
 
             int intronStart = a.getReferenceStart() + a.getLength();
-            int intronEnd   = b.getReferenceStart() - 1;
+            int intronEnd = b.getReferenceStart() - 1;
 
             if (intronEnd >= intronStart) {
                 introns.add(new Region(intronStart, intronEnd));
@@ -282,7 +240,6 @@ public class ReadPair {
 
         return introns;
     }
-
 
     private int getMismatches() {
         Integer nm1 = firstRecord.getIntegerAttribute("NM");

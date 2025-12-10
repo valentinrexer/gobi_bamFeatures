@@ -4,6 +4,7 @@ import augmentedTree.*;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 
 public class Gene implements Interval {
@@ -12,7 +13,7 @@ public class Gene implements Interval {
     private final String geneBiotype;
     private final char strand;
     private final String chromosome;
-    private final List<Transcript> transcripts;
+    private final HashMap<String, Transcript> transcripts;
     private IntervalTree<Region> mergedTranscriptTree;
     private int start = Integer.MAX_VALUE;
     private int end = Integer.MIN_VALUE;
@@ -23,16 +24,20 @@ public class Gene implements Interval {
         this.geneBiotype = geneBiotype;
         this.strand = strand;
         this.chromosome = chromosome;
-        this.transcripts = new ArrayList<>();
+        this.transcripts = new HashMap<>();
     }
 
     public void addTranscript(Transcript transcript) {
-        if(!transcripts.contains(transcript))
-            transcripts.add(transcript);
+        transcripts.put(transcript.getTranscriptId(), transcript);
+    }
+
+    public Transcript getTranscript(String transcriptId) {
+        if (!transcripts.containsKey(transcriptId)) return null;
+        return transcripts.get(transcriptId);
     }
 
     public void computeBoundaries() {
-        for (Transcript transcript : transcripts) {
+        for (Transcript transcript : transcripts.values()) {
             transcript.computeBoundaries();
             start = Math.min(start, transcript.getStart());
             end = Math.max(end, transcript.getEnd());
@@ -40,7 +45,7 @@ public class Gene implements Interval {
     }
 
     public void sortExonsForEachTranscript() {
-        transcripts.forEach(Transcript::sortExons);
+        transcripts.values().forEach(Transcript::sortExons);
     }
 
     public String getGeneId() { return geneId; }
@@ -50,7 +55,7 @@ public class Gene implements Interval {
     public String getChromosome() { return chromosome; }
 
     public List<Transcript> getTranscripts() {
-        return Collections.unmodifiableList(transcripts);
+        return Collections.unmodifiableList(transcripts.values().stream().toList());
     }
 
     public IntervalTree<Region> getMergedTranscriptTree() {
@@ -63,7 +68,7 @@ public class Gene implements Interval {
     private void computeMergedTranscriptTree() {
         mergedTranscriptTree = new IntervalTree<>();
 
-        for  (Transcript transcript : transcripts) {
+        for  (Transcript transcript : transcripts.values()) {
             for (Exon exon : transcript.getExons()) {
                 mergedTranscriptTree.add(new Region(exon.getStart(), exon.getEnd()));
             }

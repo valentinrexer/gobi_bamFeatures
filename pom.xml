@@ -29,7 +29,6 @@
             <version>1.5.0</version>
         </dependency>
 
-        <!-- Now a normal dependency, installed into ~/.m2/repository -->
         <dependency>
             <groupId>edu.lmu.gobi</groupId>
             <artifactId>augmentedtree</artifactId>
@@ -42,23 +41,23 @@
     <build>
         <plugins>
 
-            <!-- Include your own .java files inside the JAR under /sources -->
+            <!-- Copy .java files DIRECTLY next to .class files -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-resources-plugin</artifactId>
                 <version>3.3.1</version>
                 <executions>
                     <execution>
-                        <id>include-own-sources</id>
+                        <id>copy-own-sources</id>
                         <phase>process-resources</phase>
                         <goals><goal>copy-resources</goal></goals>
                         <configuration>
-                            <outputDirectory>${project.build.outputDirectory}/sources</outputDirectory>
+                            <outputDirectory>${project.build.outputDirectory}</outputDirectory>
                             <resources>
                                 <resource>
                                     <directory>src/main/java</directory>
                                     <includes>
-                                        <include>com/github/valentinrexer/**/*.java</include>
+                                        <include>**/*.java</include>
                                     </includes>
                                 </resource>
                             </resources>
@@ -68,7 +67,7 @@
             </plugin>
 
 
-            <!-- Shade plugin: create runnable fat/uber JAR -->
+            <!-- SHADE (unchanged except NO .java excludes) -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
@@ -83,33 +82,25 @@
                             <createDependencyReducedPom>false</createDependencyReducedPom>
 
                             <filters>
+
                                 <filter>
                                     <artifact>*:*</artifact>
                                     <excludes>
                                         <exclude>META-INF/*.SF</exclude>
                                         <exclude>META-INF/*.DSA</exclude>
                                         <exclude>META-INF/*.RSA</exclude>
-                                        <!-- Source-Dateien ausschließen -->
-                                        <exclude>augmentedTree/*.java</exclude>
-                                        <exclude>**/*.java</exclude>
 
-                                        <!-- MASSIVE SAVINGS: Nashorn JavaScript Engine raus -->
                                         <exclude>org/openjdk/**</exclude>
-
-                                        <!-- Apache Commons: Nur CLI behalten, Rest raus -->
                                         <exclude>org/apache/commons/compress/**</exclude>
                                         <exclude>org/apache/commons/jexl2/**</exclude>
                                         <exclude>org/apache/commons/lang3/**</exclude>
                                         <exclude>org/apache/commons/logging/**</exclude>
-
-                                        <!-- Weitere unnötige Libraries -->
                                         <exclude>org/xerial/**</exclude>
                                         <exclude>org/tukaani/**</exclude>
                                         <exclude>org/objectweb/**</exclude>
                                     </excludes>
                                 </filter>
 
-                                <!-- htsjdk: samtools + beta behalten, Rest minimal -->
                                 <filter>
                                     <artifact>com.github.samtools:htsjdk</artifact>
                                     <includes>
@@ -117,12 +108,12 @@
                                         <include>htsjdk/beta/**</include>
                                     </includes>
                                     <excludes>
-                                        <!-- Nur die offensichtlich unnötigen Teile ausschließen -->
                                         <exclude>htsjdk/samtools/sra/**</exclude>
                                         <exclude>htsjdk/samtools/metrics/**</exclude>
                                         <exclude>htsjdk/samtools/benchmark/**</exclude>
                                     </excludes>
                                 </filter>
+
                             </filters>
 
                             <transformers>
@@ -131,6 +122,7 @@
                                     <mainClass>com.github.valentinrexer.Main</mainClass>
                                 </transformer>
                             </transformers>
+
                         </configuration>
                     </execution>
                 </executions>

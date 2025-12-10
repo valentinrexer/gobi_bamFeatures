@@ -11,7 +11,6 @@ import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
-import java.util.Objects;
 
 public class Main {
     public static void main(String[] args) throws IOException {
@@ -67,7 +66,9 @@ public class Main {
             frStrand = Boolean.parseBoolean(cmd.getOptionValue("frstrand"));
         }
 
-        GtfData gtfData = GtfParser.parse(gtfPath, frStrand);
+        TreeGtf treeGtf = new  TreeGtf();
+        treeGtf.readInGffFile(gtfPath, frStrand);
+
         SamFile sam = new SamFile(bamPath);
 
         Map<String, Map<String, SAMRecord>> pendingPerChromosome = new HashMap<>();
@@ -81,7 +82,7 @@ public class Main {
                 if (record.getReadUnmappedFlag()) continue;
                 if (record.getMateUnmappedFlag()) continue;
                 if (record.isSecondaryOrSupplementary()) continue;
-                if (!Objects.equals(record.getReferenceIndex(), record.getMateReferenceIndex())) continue;
+                if (!record.getReferenceName().equals(record.getMateReferenceName())) continue;
                 if (record.getMateNegativeStrandFlag() == record.getReadNegativeStrandFlag()) continue;
 
                 String chr = record.getReferenceName();
@@ -113,7 +114,9 @@ public class Main {
                 int count = pcrIndexMap.merge(regions, 1, Integer::sum);
                 int pcrIndex = count - 1;
 
-                String result = pair.process(gtfData, frStrand) + "\tpcrindex:" + pcrIndex;
+                String result = pair.process(treeGtf, frStrand);
+                if (!result.contains("split-inconsistent"))  result += "\tpcrindex:" + pcrIndex;
+
                 writer.write(result);
                 writer.newLine();
             }

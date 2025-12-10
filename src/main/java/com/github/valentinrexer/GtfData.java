@@ -3,6 +3,7 @@ package com.github.valentinrexer;
 import augmentedTree.IntervalTree;
 import java.util.*;
 
+@Deprecated
 public class GtfData {
 
     private final Map<String, Gene> genesById = new HashMap<>();

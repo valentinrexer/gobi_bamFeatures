@@ -8,6 +8,7 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+@Deprecated
 public class GtfParser {
     public static GtfData parse(Path gtfPath, Boolean frStrand) throws IOException {
 
@@ -75,7 +76,6 @@ public class GtfParser {
         if (matcher.find()) {
             return matcher.group(1);
         } else {
-            System.out.println("Wasn't able to extract '" + attribute + "' for line object " + s);
             return null;
         }
     }
