@@ -5,12 +5,14 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import augmentedTree.*;
+import com.github.valentinrexer.utils.BamFeatureUtils;
 
 public class Transcript {
     private final String transcriptId;
     private final String geneId;
     private final char strand;
     private final List<Exon> exons;
+    private List<Region> exonVector;
     private int start = Integer.MAX_VALUE;
     private int end = Integer.MIN_VALUE;
 
@@ -45,15 +47,34 @@ public class Transcript {
     }
 
     public int getStart() { return start; }
+
     public int getEnd() { return end; }
 
-    public IntervalTree<Region> getExonIntervalTree() {
-        var tree = new IntervalTree<Region>();
-
+    private void computeExonVector() {
+        var exonVector = new ArrayList<Region>();
         for (Exon exon : exons)
-            tree.add(new  Region(exon.getStart(), exon.getEnd()));
+            exonVector.add(exon.toRegion());
 
-        return tree;
+        BamFeatureUtils.mergeVector(exonVector);
+        this.exonVector = exonVector;
+    }
+
+    public List<Region> getExonVector() {
+        if (exonVector == null) computeExonVector();
+        return exonVector;
+    }
+
+    public List<Region> getExonRegionsForInterval(Region interval) {
+        List<Region> regions = new ArrayList<>();
+
+        for (Exon exon : exons) {
+            if(exon.toRegion().intersects(interval))
+                regions.add(new Region(Math.max(interval.start(), exon.getStart()),
+                        Math.min(interval.end(), exon.getEnd()))
+                );
+        }
+
+        return regions;
     }
 
     @Override
@@ -105,7 +126,6 @@ public class Transcript {
 
         return result;
     }
-
 
     @Override
     public String toString() {

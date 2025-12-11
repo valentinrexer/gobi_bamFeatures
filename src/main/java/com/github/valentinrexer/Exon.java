@@ -15,6 +15,10 @@ public class Exon {
     public int getEnd() { return end; }
     public String getTranscriptId() { return transcriptId; }
 
+    public Region toRegion() {
+        return new Region(start, end);
+    }
+
     @Override
     public String toString() {
         return "Exon{" + start + "-" + end + ", tx=" + transcriptId + "}";

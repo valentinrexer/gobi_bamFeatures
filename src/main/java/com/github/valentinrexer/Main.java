@@ -1,6 +1,9 @@
 package com.github.valentinrexer;
 
 import htsjdk.samtools.SAMRecord;
+import htsjdk.samtools.SamReader;
+import htsjdk.samtools.SamReaderFactory;
+import htsjdk.samtools.ValidationStringency;
 import org.apache.commons.cli.*;
 
 import java.io.BufferedWriter;
@@ -69,15 +72,16 @@ public class Main {
         TreeGtf treeGtf = new  TreeGtf();
         treeGtf.readInGffFile(gtfPath, frStrand);
 
-        SamFile sam = new SamFile(bamPath);
+        SamReader sam = SamReaderFactory
+                .makeDefault()
+                .validationStringency(ValidationStringency.SILENT)
+                .open(bamPath.toFile());
 
         Map<String, Map<String, SAMRecord>> pendingPerChromosome = new HashMap<>();
-        Map<ReadPairRegions, Integer> pcrIndexMap = new HashMap<>();
+        PcrIndexMap pcrIndexMap = new PcrIndexMap();
 
         try (BufferedWriter writer = Files.newBufferedWriter(outPath)) {
-            for (Iterator<SAMRecord> it = sam.iterator(); it.hasNext(); ) {
-                SAMRecord record = it.next();
-
+            for (SAMRecord record : sam) {
                 if (!record.getReadPairedFlag()) continue;
                 if (record.getReadUnmappedFlag()) continue;
                 if (record.getMateUnmappedFlag()) continue;
@@ -110,12 +114,7 @@ public class Main {
                 }
 
                 ReadPair pair = new ReadPair(first, second);
-                ReadPairRegions regions = new ReadPairRegions(pair);
-                int count = pcrIndexMap.merge(regions, 1, Integer::sum);
-                int pcrIndex = count - 1;
-
-                String result = pair.process(treeGtf, frStrand);
-                if (!result.contains("split-inconsistent"))  result += "\tpcrindex:" + pcrIndex;
+                String result = pair.process(treeGtf, frStrand, pcrIndexMap);
 
                 writer.write(result);
                 writer.newLine();

@@ -1,11 +1,9 @@
 package com.github.valentinrexer;
 
 import augmentedTree.*;
+import com.github.valentinrexer.utils.BamFeatureUtils;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
+import java.util.*;
 
 public class Gene implements Interval {
     private final String geneId;
@@ -14,7 +12,7 @@ public class Gene implements Interval {
     private final char strand;
     private final String chromosome;
     private final HashMap<String, Transcript> transcripts;
-    private IntervalTree<Region> mergedTranscriptTree;
+    private IntervalTree<Region> mergedTranscriptome;
     private int start = Integer.MAX_VALUE;
     private int end = Integer.MIN_VALUE;
 
@@ -55,24 +53,33 @@ public class Gene implements Interval {
     public String getChromosome() { return chromosome; }
 
     public List<Transcript> getTranscripts() {
-        return Collections.unmodifiableList(transcripts.values().stream().toList());
+        return transcripts.values().stream().toList();
     }
 
-    public IntervalTree<Region> getMergedTranscriptTree() {
-        if (mergedTranscriptTree == null)
-            computeMergedTranscriptTree();
+    public void computeMergedTranscriptome() {
+        List<Region> regions = new ArrayList<>();
 
-        return mergedTranscriptTree;
-    }
-
-    private void computeMergedTranscriptTree() {
-        mergedTranscriptTree = new IntervalTree<>();
-
-        for  (Transcript transcript : transcripts.values()) {
-            for (Exon exon : transcript.getExons()) {
-                mergedTranscriptTree.add(new Region(exon.getStart(), exon.getEnd()));
-            }
+        for (Transcript transcript : transcripts.values()) {
+            regions.addAll(transcript.getExonVector());
         }
+
+        regions = BamFeatureUtils.mergeVector(regions);
+
+        mergedTranscriptome = new IntervalTree<>();
+        mergedTranscriptome.addAll(regions);
+    }
+
+    public List<Region> getMergedTranscriptomeForInterval(Region interval) {
+        if (mergedTranscriptome == null) computeMergedTranscriptome();
+
+        List<Region> intersectingRegions = mergedTranscriptome.getIntervalsIntersecting(interval.start(), interval.end(), new ArrayList<>());
+        List<Region> trimmedRegions = new ArrayList<>();
+
+        for (Region intersectingRegion : intersectingRegions) {
+            trimmedRegions.add(new Region(Math.max(interval.start(), intersectingRegion.start()),
+                    Math.min(interval.end(), intersectingRegion.end())));
+        }
+        return trimmedRegions;
     }
 
     @Override

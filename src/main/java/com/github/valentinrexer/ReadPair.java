@@ -1,5 +1,6 @@
 package com.github.valentinrexer;
 
+import com.github.valentinrexer.utils.BamFeatureUtils;
 import htsjdk.samtools.AlignmentBlock;
 import htsjdk.samtools.CigarElement;
 import htsjdk.samtools.CigarOperator;
@@ -13,7 +14,9 @@ public class ReadPair {
     private final SAMRecord lastRecord;
     private final Region firstRecordRegion;
     private final Region lastRecordRegion;
-    private final List<Region> regionVector;
+    private final List<Region> pairRegionVector;
+    private final List<Region> regionVectorFirst;
+    private final List<Region> regionVectorLast;
     private final Set<Region> intronsFirst;
     private final Set<Region> intronsLast;
     private final String chromosome;
@@ -22,10 +25,13 @@ public class ReadPair {
         this.firstRecord = firstRecord;
         this.lastRecord = lastRecord;
 
-        List<Region> regionVector = getRegionVector(firstRecord);
-        regionVector.addAll(getRegionVector(lastRecord));
-        regionVector = mergeVector(regionVector);
-        this.regionVector = regionVector;
+        regionVectorFirst = getRegionVector(firstRecord);
+        regionVectorLast = getRegionVector(lastRecord);
+
+        List<Region> regionVector = new ArrayList<>(regionVectorFirst);
+        regionVector.addAll(regionVectorLast);
+        regionVector = BamFeatureUtils.mergeVector(regionVector);
+        this.pairRegionVector = regionVector;
         this.chromosome = firstRecord.getReferenceName();
 
         firstRecordRegion = new Region(firstRecord.getAlignmentStart(), firstRecord.getAlignmentEnd());
@@ -35,16 +41,16 @@ public class ReadPair {
         this.intronsLast = getIntrons(lastRecord);
     }
 
-    public String process(TreeGtf treeGtf, Boolean frStrand) {
+    public String process(TreeGtf treeGtf, Boolean frStrand, PcrIndexMap pcrIndexMap) {
         Integer nSplit = getNSplit();
         if (nSplit == null) return firstRecord.getReadName() + "\tsplit-inconsistent:true";
 
         int mm = getMismatches();
-        int clipped = getTotalClipped();
+        int clipping = getTotalClipped();
         var geneLvl = getGeneAnnotation(treeGtf, frStrand);
-
         int gCount;
         String geneOutputString;
+
         if (geneLvl.getFirst().level() == GenicLevel.INTERGENIC) {
             gCount = 0;
             var geneDistance = getGeneDistance(chromosome, treeGtf, frStrand);
@@ -62,7 +68,15 @@ public class ReadPair {
             geneOutputString = associatedGenesString.substring(0, associatedGenesString.length() - 1);
         }
 
-        return firstRecord.getReadName() + "\tmm:" + mm + "\tclipping:" + clipped + "\tnsplit:" + nSplit + "\tgcount:"+ gCount + "\t" + geneOutputString;
+        int pcrIndex = pcrIndexMap.getPcrIndex(pairRegionVector, frStrand);
+
+        return firstRecord.getReadName() +
+                "\tmm:" + mm +
+                "\tclipping:" + clipping +
+                "\tgcount:"+ gCount +
+                "\tnsplit:" + nSplit +
+                "\t" + geneOutputString +
+                "\tpcrindex:" + pcrIndex;
     }
 
     private boolean hasAntiSenseGene(TreeGtf treeGtf, Boolean frStrand) {
@@ -85,7 +99,7 @@ public class ReadPair {
         }
 
         for (Gene neighbor : rightNeighbor) {
-            var dist = readBounds.end() - neighbor.getStart();
+            var dist = neighbor.getStart() - readBounds.end();
             if (dist < 0) return 0;
             minLeftDist = Math.min(minLeftDist, dist);
         }
@@ -112,46 +126,53 @@ public class ReadPair {
     }
 
     private GenicLevelContainer getGenicLevel(Gene candidateGene) {
-        List<Transcript> matchingTranscripts = new ArrayList<>();
+        String transcriptomicString = isTranscriptomic(candidateGene);
+        if (transcriptomicString != null) return new GenicLevelContainer(GenicLevel.TRANSCRIPTOMIC, transcriptomicString);
 
-        for (Transcript transcript : candidateGene.getTranscripts()) {
-            var tree = transcript.getExonIntervalTree();
-            var covers = true;
+        String mergedTranscriptomicString = isMergedTranscriptomic(candidateGene);
+        if (mergedTranscriptomicString != null) return new GenicLevelContainer(GenicLevel.MERGED_TRANSCRIPTOMIC, mergedTranscriptomicString);
 
-            for (Region vector : regionVector) {
-                var exonsCoveringVector = tree.getIntervalsSpanning(vector.start(), vector.end(), new ArrayList<>());
-                if (exonsCoveringVector.isEmpty()) {
-                    covers = false;
-                    break;
-                }
-            }
-            if (!covers) continue;
-            matchingTranscripts.add(transcript);
-        }
-
-        if (!matchingTranscripts.isEmpty()) {
-            StringBuilder ret = new StringBuilder(candidateGene.getGeneId() + "," + candidateGene.getGeneBiotype() + ":");
-            for (Transcript transcript : matchingTranscripts)
-                ret.append(transcript.getGeneId()).append(",");
-
-            return new GenicLevelContainer(GenicLevel.TRANSCRIPTOMIC, ret.substring(0, ret.length() - 1));
-        }
-
-        var tree = candidateGene.getMergedTranscriptTree();
-        for (Region vector : regionVector) {
-            var exonsCoveringVector = tree.getIntervalsSpanning(vector.start(), vector.end(), new ArrayList<>());
-            if (exonsCoveringVector.isEmpty())
-                return new GenicLevelContainer(GenicLevel.INTRONIC, candidateGene.getGeneId() + "," + candidateGene.getGeneBiotype() + ":INTRON");
-        }
-
-        return new GenicLevelContainer(GenicLevel.MERGED_TRANSCRIPTOMIC, candidateGene.getGeneId() + "," + candidateGene.getGeneBiotype() + ":MERGED");
+        else return new GenicLevelContainer(GenicLevel.INTRONIC, candidateGene.getGeneId() + "," + candidateGene.getGeneBiotype() + ":INTRON");
     }
 
-    private ReadPairType determineReadPairTypeForSingleGene(Gene gene) {
-        Region interval = getMinStartMaxEnd();
-        if (interval.start() >= gene.getStart() && interval.end() < gene.getEnd()) return ReadPairType.GENIC;
-        else if (interval.start() < gene.getStart() && interval.end() > gene.getEnd()) return ReadPairType.COVERS_WHOLE_GENE;
-        else return ReadPairType.INTERGENIC;
+    private String isTranscriptomic(Gene candidateGene) {
+        List<Transcript> matchingTranscripts = new ArrayList<>();
+
+        var exonVectorFirstRead = new HashSet<>(regionVectorFirst);
+        var exonVectorLastRead = new HashSet<>(regionVectorLast);
+
+        for (Transcript transcript : candidateGene.getTranscripts()) {
+            var exonVectorFirstInterval = new HashSet<>(transcript.getExonRegionsForInterval(firstRecordRegion));
+            var exonVectorLastInterval = new HashSet<>(transcript.getExonRegionsForInterval(lastRecordRegion));
+
+            if (exonVectorFirstInterval.equals(exonVectorFirstRead) && exonVectorLastInterval.equals(exonVectorLastRead)) {
+                matchingTranscripts.add(transcript);
+            }
+        }
+
+        if (matchingTranscripts.isEmpty()) return null;
+
+        StringBuilder transcriptomicString = new StringBuilder(candidateGene.getGeneId() + "," + candidateGene.getGeneBiotype() + ":");
+        for (Transcript transcript : matchingTranscripts)
+            transcriptomicString.append(transcript.getTranscriptId()).append(",");
+
+        return transcriptomicString.substring(0, transcriptomicString.length() - 1);
+    }
+
+    private String isMergedTranscriptomic(Gene candidateGene) {
+        for (Region block : regionVectorFirst) {
+            var mergedTranscriptBlock = candidateGene.getMergedTranscriptomeForInterval(block);
+            if (mergedTranscriptBlock.size() != 1) return null;
+            if (!mergedTranscriptBlock.getFirst().equals(block)) return null;
+        }
+
+        for (Region block : regionVectorLast) {
+            var mergedTranscriptBlock = candidateGene.getMergedTranscriptomeForInterval(block);
+            if (mergedTranscriptBlock.size() != 1) return null;
+            if (!mergedTranscriptBlock.getFirst().equals(block)) return null;
+        }
+
+        return candidateGene.getGeneId() + "," + candidateGene.getGeneBiotype() + ":MERGED";
     }
 
     private List<Gene> getCandidateGenes(TreeGtf treeGtf, Boolean frStrand) {
@@ -161,40 +182,6 @@ public class ReadPair {
         HashSet<Gene> candidates = new HashSet<>(treeGtf.getContainingGenes(chr, readBounds.start(), readBounds.end(), frStrand));
 
         return new ArrayList<>(candidates);
-    }
-
-    private static List<Region> mergeVector(List<Region> vector) {
-        if (vector.isEmpty()) return List.of();
-
-        vector.sort(Comparator.comparingInt(Region::start)
-                .thenComparingInt(Region::end));
-
-        var merged = new ArrayList<Region>();
-        Region prev = vector.get(0);
-
-        for (int i = 1; i < vector.size(); i++) {
-            Region next = vector.get(i);
-
-            if (prev.end() >= next.start() - 1) {
-                prev = new Region(prev.start(), Math.max(prev.end(), next.end()));
-            } else {
-                merged.add(prev);
-                prev = next;
-            }
-        }
-        merged.add(prev);
-
-        return merged;
-    }
-
-    private static List<Region> getRegionVector(SAMRecord record) {
-        List<Region> regions = new ArrayList<>();
-
-        for (AlignmentBlock block : record.getAlignmentBlocks()) {
-            regions.add(new Region(block.getReferenceStart(), block.getReferenceStart() + block.getLength() - 1));
-        }
-
-        return regions;
     }
 
     private Integer getNSplit() {
@@ -218,27 +205,6 @@ public class ReadPair {
 
         firstIntrons.addAll(lastIntrons);
         return firstIntrons.size();
-    }
-
-    private static HashSet<Region> getIntrons(SAMRecord record) {
-        var introns = new HashSet<Region>();
-        List<AlignmentBlock> blocks = record.getAlignmentBlocks();
-
-        if (blocks.size() < 2) return introns;
-
-        for (int i = 0; i < blocks.size() - 1; i++) {
-            AlignmentBlock a = blocks.get(i);
-            AlignmentBlock b = blocks.get(i + 1);
-
-            int intronStart = a.getReferenceStart() + a.getLength();
-            int intronEnd = b.getReferenceStart() - 1;
-
-            if (intronEnd >= intronStart) {
-                introns.add(new Region(intronStart, intronEnd));
-            }
-        }
-
-        return introns;
     }
 
     private int getMismatches() {
@@ -274,7 +240,7 @@ public class ReadPair {
         int minPos = Integer.MAX_VALUE;
         int maxPos = Integer.MIN_VALUE;
 
-        for (Region region : regionVector) {
+        for (Region region : pairRegionVector) {
             minPos = Math.min(minPos, region.start());
             maxPos = Math.max(maxPos, region.end());
         }
@@ -282,12 +248,35 @@ public class ReadPair {
         return new Region(minPos, maxPos);
     }
 
-    public Region getFirstRecordRegion() {
-        return firstRecordRegion;
+    private static HashSet<Region> getIntrons(SAMRecord record) {
+        var introns = new HashSet<Region>();
+        List<AlignmentBlock> blocks = record.getAlignmentBlocks();
+
+        if (blocks.size() < 2) return introns;
+
+        for (int i = 0; i < blocks.size() - 1; i++) {
+            AlignmentBlock a = blocks.get(i);
+            AlignmentBlock b = blocks.get(i + 1);
+
+            int intronStart = a.getReferenceStart() + a.getLength();
+            int intronEnd = b.getReferenceStart() - 1;
+
+            if (intronEnd >= intronStart) {
+                introns.add(new Region(intronStart, intronEnd));
+            }
+        }
+
+        return introns;
     }
 
-    public Region getLastRecordRegion() {
-        return lastRecordRegion;
+    private static List<Region> getRegionVector(SAMRecord record) {
+        List<Region> regions = new ArrayList<>();
+
+        for (AlignmentBlock block : record.getAlignmentBlocks()) {
+            regions.add(new Region(block.getReferenceStart(), block.getReferenceStart() + block.getLength() - 1));
+        }
+
+        return BamFeatureUtils.mergeVector(regions);
     }
 
     @Override

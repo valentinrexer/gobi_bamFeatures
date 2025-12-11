@@ -66,7 +66,7 @@ public class TreeGtf {
             Boolean key = null;
 
             if (frStrand != null)
-                key = g.getStart() == '+';
+                key = g.getStrand() == '+';
 
             Map<String, IntervalTree<Gene>> mapForStrand =
                     geneTrees.computeIfAbsent(key, k -> new HashMap<>());
