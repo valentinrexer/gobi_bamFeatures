@@ -25,7 +25,7 @@ public class PcrIndexMap {
 
     public int getPcrIndex(List<Region> regionVectorList, Boolean strand) {
         var regionVector = new HashSet<>(regionVectorList);
-        if (! pcrIndexMap.containsKey(strand))
+        if (!pcrIndexMap.containsKey(strand))
             pcrIndexMap.put(strand, new HashMap<>());
 
         var map = pcrIndexMap.get(strand);

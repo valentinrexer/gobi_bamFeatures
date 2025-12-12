@@ -20,6 +20,7 @@ public class ReadPair {
     private final Set<Region> intronsFirst;
     private final Set<Region> intronsLast;
     private final String chromosome;
+    private final boolean strand;
 
     public ReadPair(SAMRecord firstRecord, SAMRecord lastRecord) {
         this.firstRecord = firstRecord;
@@ -27,6 +28,7 @@ public class ReadPair {
 
         regionVectorFirst = getRegionVector(firstRecord);
         regionVectorLast = getRegionVector(lastRecord);
+        strand = !firstRecord.getReadNegativeStrandFlag();
 
         List<Region> regionVector = new ArrayList<>(regionVectorFirst);
         regionVector.addAll(regionVectorLast);
@@ -68,7 +70,8 @@ public class ReadPair {
             geneOutputString = associatedGenesString.substring(0, associatedGenesString.length() - 1);
         }
 
-        int pcrIndex = pcrIndexMap.getPcrIndex(pairRegionVector, frStrand);
+        Boolean indexStrand = frStrand == null ? null : (frStrand == strand);
+        int pcrIndex = pcrIndexMap.getPcrIndex(pairRegionVector, indexStrand);
 
         return firstRecord.getReadName() +
                 "\tmm:" + mm +
@@ -108,7 +111,10 @@ public class ReadPair {
     } 
 
     private List<GenicLevelContainer> getGeneAnnotation(TreeGtf treeGtf, Boolean frStrand) {
-        var candidates = getCandidateGenes(treeGtf, frStrand);
+        Boolean lookupStrand =
+                frStrand == null ? null : (frStrand == strand);
+
+        var candidates = getCandidateGenes(treeGtf, lookupStrand);
         var genicLevelMapping = new HashMap<GenicLevel, List<GenicLevelContainer>>();
 
         for (Gene candidate : candidates) {
@@ -175,11 +181,11 @@ public class ReadPair {
         return candidateGene.getGeneId() + "," + candidateGene.getGeneBiotype() + ":MERGED";
     }
 
-    private List<Gene> getCandidateGenes(TreeGtf treeGtf, Boolean frStrand) {
+    private List<Gene> getCandidateGenes(TreeGtf treeGtf, Boolean strand) {
         String chr = firstRecord.getReferenceName();
 
         var readBounds = getMinStartMaxEnd();
-        HashSet<Gene> candidates = new HashSet<>(treeGtf.getContainingGenes(chr, readBounds.start(), readBounds.end(), frStrand));
+        HashSet<Gene> candidates = new HashSet<>(treeGtf.getContainingGenes(chr, readBounds.start(), readBounds.end(), strand));
 
         return new ArrayList<>(candidates);
     }
