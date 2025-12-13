@@ -122,4 +122,8 @@ public class TreeGtf {
         if (tree == null) return Collections.emptyList();
         return getGenesByIntervalOperation(chr, start, end, frStrand, tree::getIntervalsLeftNeighbor);
     }
+
+    public List<Gene> getGenes() {
+        return genes.values().stream().toList();
+    }
 }

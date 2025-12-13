@@ -13,6 +13,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.logging.Logger;
 
 public class Main {
     public static void main(String[] args) throws IOException {
@@ -59,6 +60,8 @@ public class Main {
             return;
         }
 
+        Logger logger = Logger.getLogger(Main.class.getName());
+
         Path gtfPath = Paths.get(cmd.getOptionValue("gtf"));
         Path bamPath = Paths.get(cmd.getOptionValue("bam"));
         Path outPath = Paths.get(cmd.getOptionValue("o"));
@@ -76,7 +79,8 @@ public class Main {
                 .validationStringency(ValidationStringency.SILENT)
                 .open(bamPath.toFile());
 
-        Map<String, Map<String, SAMRecord>> pendingPerChromosome = new HashMap<>();
+        String currentChromosome = "";
+        Map<String, SAMRecord> pendingRecords = new HashMap<>();
         PcrIndexMap pcrIndexMap = new PcrIndexMap();
 
         try (BufferedWriter writer = Files.newBufferedWriter(outPath)) {
@@ -89,8 +93,10 @@ public class Main {
                 if (record.getMateNegativeStrandFlag() == record.getReadNegativeStrandFlag()) continue;
 
                 String chr = record.getReferenceName();
-                pendingPerChromosome.putIfAbsent(chr, new HashMap<>());
-                Map<String, SAMRecord> pendingRecords = pendingPerChromosome.get(chr);
+                if (!chr.equals(currentChromosome)) {
+                    pendingRecords.clear();
+                    currentChromosome = chr;
+                }
 
                 String readName = record.getReadName();
 
@@ -117,6 +123,7 @@ public class Main {
 
                 writer.write(result);
                 writer.newLine();
+                logger.info("Processed " + record.getReadName());
             }
         }
     }

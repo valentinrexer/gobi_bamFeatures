@@ -26,6 +26,14 @@ public record Region(int start, int end) implements Interval {
         return new Region(Math.max(start, region.start()), Math.min(end, region.end()));
     }
 
+    public int exclusiveLength() {
+        return end - start;
+    }
+
+    public int inclusiveLength() {
+        return end - start + 1;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (o == null || getClass() != o.getClass()) return false;
